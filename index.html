@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Road Survey Tool v2</title>
+    <title>Road Survey Tool v3.0 (NoteCam Style)</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f9; text-align: center; }
@@ -11,8 +11,9 @@
         .active-screen { display: block; }
         h2 { color: #333; margin-bottom: 5px; }
         input { width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; }
-        button { width: 95%; padding: 12px; margin-top: 10px; font-size: 16px; cursor: pointer; background: #007BFF; color: white; border: none; border-radius: 5px; font-weight: bold; }
+        button { width: 95%; padding: 12px; margin-top: 10px; font-size: 16px; cursor: pointer; background: #007BFF; color: white; border: none; border-radius: 5px; font-weight: bold; transition: background 0.3s; }
         button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
         .stop-btn { background: #DC3545; }
         .custom-file-upload { display: block; padding: 12px; cursor: pointer; background: #FFC107; color: black; border-radius: 5px; font-size: 16px; margin-top: 10px; font-weight: bold;}
         input[type="file"] { display: none; }
@@ -21,6 +22,7 @@
         .btn-group { display: flex; flex-direction: column; gap: 8px; margin-top: 15px; }
         .export-excel { background: #28A745; }
         .export-kml { background: #17A2B8; }
+        #landscape-hint { font-size: 12px; color: #555; font-style: italic; display: none;}
     </style>
 </head>
 <body>
@@ -47,13 +49,14 @@
             <strong>Road:</strong> <span id="infoRoad"></span>
         </div>
 
-        <button id="startBtn" onclick="startTracking()">Start Tracking</button>
-        <button id="stopBtn" class="stop-btn" onclick="stopTracking()" disabled>Stop Tracking</button>
+        <button id="startBtn" onclick="startTracking()">▶ Start Tracking</button>
+        <button id="stopBtn" class="stop-btn" onclick="stopTracking()" disabled>■ Stop Tracking</button>
         
         <label class="custom-file-upload">
             <input type="file" accept="image/*" capture="environment" id="cameraInput" onchange="capturePhoto()">
             📷 Capture Image
         </label>
+        <span id="landscape-hint">(Please hold phone in landscape mode)</span>
         
         <div id="status" style="margin-top: 10px; font-weight: bold; color: red;">Status: Setup Required (Use HTTPS)</div>
         
@@ -69,10 +72,12 @@
     <script>
         let currentUser = "";
         let currentRoad = "";
-        let map, polyline;
+        let map, polyline, currentPositionMarker;
         let surveyData = [];
         let watchId = null;
         let pointCounter = 1;
+
+        // --- Core Application Functions ---
 
         function processLogin() {
             const user = document.getElementById("username").value.trim();
@@ -94,26 +99,40 @@
                 document.getElementById("infoRoad").innerText = currentRoad;
                 switchScreen("roadScreen", "surveyScreen");
                 initBlankMap();
+                if(window.innerWidth < window.innerHeight) {
+                    document.getElementById('landscape-hint').style.display = 'block';
+                }
             } else {
                 alert("Please enter a Road Name.");
             }
         }
 
         function initBlankMap() {
-            // Default center at standard coordinates before GPS kicks in
-            map = L.map('map').setView([23.2324, 87.8624], 13); 
+            // Default center Burdwan NH19/Flyover area from previous test
+            map = L.map('map').setView([23.235, 87.859], 15); 
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
                 maxZoom: 20,
                 attribution: '© OpenStreetMap'
             }).addTo(map);
-            polyline = L.polyline([], {color: 'blue', weight: 5}).addTo(map);
+            
+            // Route Line
+            polyline = L.polyline([], {color: 'blue', weight: 4, opacity: 0.7}).addTo(map);
+            
+            // Marker for current live position (User icon style)
+            currentPositionMarker = L.circleMarker([0,0], {
+                radius: 8,
+                fillColor: "#007BFF",
+                color: "#fff",
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            }).addTo(map);
         }
 
+        // --- Tracking Logic ---
+
         function startTracking() {
-            if (!navigator.geolocation) {
-                alert("Geolocation is not supported by your browser.");
-                return;
-            }
+            if (!navigator.geolocation) { alert("Geolocation is not supported."); return; }
             
             document.getElementById('startBtn').disabled = true;
             document.getElementById('stopBtn').disabled = false;
@@ -125,27 +144,42 @@
                     const lat = position.coords.latitude;
                     const lng = position.coords.longitude;
                     const accuracy = position.coords.accuracy;
+                    const alt = position.coords.altitude; // Often null in browsers
 
                     document.getElementById('status').innerText = "Status: Live Tracking Active ✔";
                     document.getElementById('status').style.color = "green";
 
                     const latLng = [lat, lng];
                     polyline.addLatLng(latLng);
+                    currentPositionMarker.setLatLng(latLng);
                     map.setView(latLng, 18);
+
+                    // --- [Change Required 1: Point Marking] ---
+                    // Add a persistent small dot for every auto-point along the route
+                    L.circleMarker(latLng, {
+                        radius: 3,
+                        fillColor: "blue",
+                        color: "#000",
+                        weight: 1,
+                        opacity: 0.5,
+                        fillOpacity: 0.5,
+                        interactive: false // Don't block clicks
+                    }).addTo(map);
 
                     let time = new Date().toLocaleTimeString();
                     surveyData.push({ 
                         point: pointCounter++, 
                         lat: lat.toFixed(6), 
                         lng: lng.toFixed(6), 
-                        accuracy: accuracy.toFixed(2), 
+                        alt: alt ? alt.toFixed(1) : 'N/A',
+                        accuracy: accuracy.toFixed(1), 
                         time: time, 
                         type: "Route Point" 
                     });
                 },
                 (error) => {
-                    console.log(error);
-                    document.getElementById('status').innerText = "Status: GPS Error! (Must use HTTPS / Turn on GPS)";
+                    console.error(error);
+                    document.getElementById('status').innerText = "Status: GPS Error! (Use HTTPS & Turn on GPS)";
                     document.getElementById('status').style.color = "red";
                 },
                 { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
@@ -162,40 +196,156 @@
             }
         }
 
+        // --- [Change Required 2 & 3: Camera Watermark & Point] ---
+
         function capturePhoto() {
             const fileInput = document.getElementById('cameraInput');
-            if(fileInput.files.length > 0) {
-                navigator.geolocation.getCurrentPosition((position) => {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    let time = new Date().toLocaleTimeString();
-                    
-                    surveyData.push({ 
-                        point: "PHOTO_" + pointCounter, 
-                        lat: lat.toFixed(6), 
-                        lng: lng.toFixed(6), 
-                        accuracy: position.coords.accuracy.toFixed(2), 
-                        time: time, 
-                        type: "Photo Point" 
-                    });
-                    
-                    L.marker([lat, lng]).addTo(map).bindPopup("📸 Photo Location").openPopup();
-                    alert("Photo Coordinates Captured!");
-                }, () => alert("GPS error during photo capture."), { enableHighAccuracy: true });
-            }
+            if(fileInput.files.length === 0) return;
+
+            document.getElementById('status').innerText = "Status: Processing Image... ⌛";
+            document.getElementById('status').style.color = "blue";
+
+            // Get current location strictly for the photo
+            navigator.geolocation.getCurrentPosition((position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                const alt = position.coords.altitude;
+                const accuracy = position.coords.accuracy;
+                
+                // --- 1. Process and Watermark Image ---
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        // Create canvas matching image dimensions
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Draw original image
+                        ctx.drawImage(img, 0, 0);
+                        
+                        // Define data for watermark (NoteCam style)
+                        const dmsLat = convertDecToDMS(lat, true);
+                        const dmsLng = convertDecToDMS(lng, false);
+                        const dateStr = new Date().toLocaleDateString('en-GB').replace(/\//g, '-'); // dd-mm-yyyy
+                        const timeStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                        const altStr = alt ? alt.toFixed(1) + ' m' : 'N/A';
+                        const accStr = accuracy.toFixed(1) + ' m';
+
+                        // Text Content (As requested by reference)
+                        const lines = [
+                            `Latitude: ${dmsLat}`,
+                            `Longitude: ${dmsLng}`,
+                            `Elevation: ${altStr}`,
+                            `Accuracy: ${accStr}`,
+                            `Date: ${dateStr}`,
+                            `Time: ${timeStr}`
+                        ];
+
+                        // Watermark Styling
+                        const fontSize = Math.max(canvas.width * 0.02, 12); // Responsive font size
+                        ctx.font = `${fontSize}px monospace`; // Monospace matches NoteCam style
+                        ctx.fillStyle = "white";
+                        
+                        // Measure text to make a background box
+                        const lineHeight = fontSize * 1.3;
+                        let maxLineWidth = 0;
+                        lines.forEach(line => maxLineWidth = Math.max(maxLineWidth, ctx.measureText(line).width));
+                        
+                        const margin = fontSize * 0.5;
+                        const boxWidth = maxLineWidth + (margin * 2);
+                        const boxHeight = (lines.length * lineHeight) + (margin * 2);
+                        const boxX = margin;
+                        const boxY = canvas.height - boxHeight - margin;
+
+                        // Draw semi-transparent background box (left bottom)
+                        ctx.fillStyle = "rgba(0,0,0,0.5)";
+                        ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+                        
+                        // Draw text lines
+                        ctx.fillStyle = "white";
+                        ctx.textBaseline = "top";
+                        lines.forEach((line, index) => {
+                            ctx.fillText(line, boxX + margin, boxY + margin + (index * lineHeight));
+                        });
+
+                        // Convert canvas to JPG and offer immediate download
+                        // (Preventing phone memory overload by not keeping full image in array)
+                        const watermarkedImageUrl = canvas.toDataURL('image/jpeg', 0.9);
+                        const fileName = `IMAGE_${currentRoad}_${pointCounter}_${dateStr}_${timeStr.replace(':','')}.jpg`;
+                        downloadFileUrl(watermarkedImageUrl, fileName);
+
+                        // --- 2. Update Map Marker (Yellow Circle with Camera Icon) ---
+                        const latLng = [lat, lng];
+                        // persistent Marker for photos
+                        L.circleMarker(latLng, {
+                            radius: 10,
+                            fillColor: "#FFC107", // Yellow
+                            color: "#000",
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.9
+                        }).addTo(map).bindPopup("📸 Watermarked Photo Taken<br>"+fileName);
+
+                        // --- 3. Save Coordinates in Data Array ---
+                        surveyData.push({ 
+                            point: "PHOTO_" + pointCounter, 
+                            lat: lat.toFixed(6), 
+                            lng: lng.toFixed(6), 
+                            alt: altStr,
+                            accuracy: accStr, 
+                            time: timeStr, 
+                            type: `Photo Point (${fileName})`
+                        });
+                        pointCounter++; // Increment globally
+
+                        document.getElementById('status').innerText = "Status: Image processed & Downloaded ✔";
+                        document.getElementById('status').style.color = "green";
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(fileInput.files[0]);
+
+            }, (err) => {
+                alert("GPS error during photo capture. Cannot watermark.");
+                document.getElementById('status').innerText = "Status: Live Tracking Active ✔";
+            }, { enableHighAccuracy: true });
         }
 
-        // 1. EXPORT EXCEL (CSV)
+        // --- Helper Function: Decimal Degrees to DMS ---
+        function convertDecToDMS(dd, isLat) {
+            const absolute = Math.abs(dd);
+            const degrees = Math.floor(absolute);
+            const minutesNotTruncated = (absolute - degrees) * 60;
+            const minutes = Math.floor(minutesNotTruncated);
+            const seconds = Math.floor((minutesNotTruncated - minutes) * 60);
+
+            let direction = "";
+            if (isLat) {
+                direction = dd >= 0 ? "N" : "S";
+            } else {
+                direction = dd >= 0 ? "E" : "W";
+            }
+
+            return `${degrees}°${minutes}'${seconds}" ${direction}`;
+        }
+
+        // --- Export Functions ---
+
+        // 1. EXPORT EXCEL (CSV) - Added Elevation
         function exportExcel() {
             if (surveyData.length === 0) { alert("No data to export!"); return; }
-            let csv = "Surveyor,Road Name,Point,Latitude,Longitude,Accuracy(m),Time,Type\n";
+            let csv = "Surveyor,Road Name,Point,Latitude,Longitude,Elevation(m),Accuracy(m),Time,Type/ImageName\n";
             surveyData.forEach(r => {
-                csv += `${currentUser},"${currentRoad}",${r.point},${r.lat},${r.lng},${r.accuracy},${r.time},${r.type}\n`;
+                csv += `${currentUser},"${currentRoad}",${r.point},${r.lat},${r.lng},${r.alt},${r.accuracy},${r.time},"${r.type}"\n`;
             });
-            downloadFile(csv, `Survey_${currentRoad}.csv`, "text/csv");
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            downloadFileUrl(URL.createObjectURL(blob), `Survey_${currentRoad}.csv`);
         }
 
-        // 2. EXPORT KML (Google Earth Line & Points)
+        // 2. EXPORT KML (Google Earth - with elevation)
         function exportKML() {
             if (surveyData.length === 0) { alert("No data to export!"); return; }
             
@@ -203,14 +353,15 @@
             let placemarks = "";
 
             surveyData.forEach(r => {
+                let safeAlt = r.alt === 'N/A' ? 0 : r.alt;
                 if (r.type === "Route Point") {
-                    kmlCoords += `${r.lng},${r.lat},0\n`;
-                } else if (r.type === "Photo Point") {
+                    kmlCoords += `${r.lng},${r.lat},${safeAlt}\n`;
+                } else if (r.type.startsWith("Photo Point")) {
                     placemarks += `
                     <Placemark>
                         <name>${r.point}</name>
-                        <description>Captured by ${currentUser} at ${r.time}</description>
-                        <Point><coordinates>${r.lng},${r.lat},0</coordinates></Point>
+                        <description>Captured by ${currentUser} at ${r.time}\nFile: ${r.type.split('(')[1].split(')')[0]}</description>
+                        <Point><coordinates>${r.lng},${r.lat},${safeAlt}</coordinates></Point>
                     </Placemark>`;
                 }
             });
@@ -223,6 +374,7 @@
       <name>Road Alignment Path</name>
       <LineString>
         <tessellate>1</tessellate>
+        <altitudeMode>relativeToGround</altitudeMode>
         <coordinates>
           ${kmlCoords}
         </coordinates>
@@ -232,14 +384,14 @@
   </Document>
 </kml>`;
 
-            downloadFile(kml, `Survey_${currentRoad}.kml`, "application/vnd.google-earth.kml+xml");
+            const blob = new Blob([kml], { type: "application/vnd.google-earth.kml+xml" });
+            downloadFileUrl(URL.createObjectURL(blob), `Survey_${currentRoad}.kml`);
         }
 
-        // Helper function to download files
-        function downloadFile(content, fileName, contentType) {
-            const blob = new Blob([content], { type: contentType });
+        // Helper: simulated download
+        function downloadFileUrl(url, fileName) {
             const a = document.createElement("a");
-            a.href = URL.createObjectURL(blob);
+            a.href = url;
             a.download = fileName;
             document.body.appendChild(a);
             a.click();
@@ -249,6 +401,7 @@
         function switchScreen(hideId, showId) {
             document.getElementById(hideId).classList.remove("active-screen");
             document.getElementById(showId).classList.add("active-screen");
+            if(showId === "surveyScreen") setTimeout(() => map.invalidateSize(), 100);
         }
     </script>
 </body>
