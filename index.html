@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Road Survey Tool v2</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f9; text-align: center; }
+        .screen { display: none; padding: 20px; max-width: 400px; margin: 30px auto; background: white; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .active-screen { display: block; }
+        h2 { color: #333; margin-bottom: 5px; }
+        input { width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; }
+        button { width: 95%; padding: 12px; margin-top: 10px; font-size: 16px; cursor: pointer; background: #007BFF; color: white; border: none; border-radius: 5px; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        .stop-btn { background: #DC3545; }
+        .custom-file-upload { display: block; padding: 12px; cursor: pointer; background: #FFC107; color: black; border-radius: 5px; font-size: 16px; margin-top: 10px; font-weight: bold;}
+        input[type="file"] { display: none; }
+        #map { height: 45vh; width: 100%; margin-top: 15px; border: 2px solid #ddd; border-radius: 5px; }
+        .info-bar { background: #e9ecef; padding: 10px; border-radius: 5px; margin-bottom: 15px; text-align: left; font-size: 14px; }
+        .btn-group { display: flex; flex-direction: column; gap: 8px; margin-top: 15px; }
+        .export-excel { background: #28A745; }
+        .export-kml { background: #17A2B8; }
+    </style>
+</head>
+<body>
+
+    <div id="loginScreen" class="screen active-screen">
+        <h2>Surveyor Login</h2>
+        <input type="text" id="username" placeholder="Enter User ID / Name" required>
+        <input type="password" id="password" placeholder="Password (Use: 1234)" required>
+        <button onclick="processLogin()">Login</button>
+        <p id="loginError" style="color: red; display: none;">Invalid Password!</p>
+    </div>
+
+    <div id="roadScreen" class="screen">
+        <h2>Road Information</h2>
+        <p>Welcome, <span id="displayUser" style="font-weight: bold;"></span></p>
+        <input type="text" id="roadName" placeholder="Enter Road Name / ID" required>
+        <button onclick="startSurveySetup()">Proceed to Map</button>
+    </div>
+
+    <div id="surveyScreen" class="screen" style="max-width: 500px; margin: 10px auto;">
+        <h2>Active Survey</h2>
+        <div class="info-bar">
+            <strong>Surveyor:</strong> <span id="infoUser"></span> | 
+            <strong>Road:</strong> <span id="infoRoad"></span>
+        </div>
+
+        <button id="startBtn" onclick="startTracking()">Start Tracking</button>
+        <button id="stopBtn" class="stop-btn" onclick="stopTracking()" disabled>Stop Tracking</button>
+        
+        <label class="custom-file-upload">
+            <input type="file" accept="image/*" capture="environment" id="cameraInput" onchange="capturePhoto()">
+            📷 Capture Image
+        </label>
+        
+        <div id="status" style="margin-top: 10px; font-weight: bold; color: red;">Status: Setup Required (Use HTTPS)</div>
+        
+        <div id="map"></div>
+        
+        <div class="btn-group">
+            <button class="export-excel" onclick="exportExcel()">⬇️ Export to Excel (CSV)</button>
+            <button class="export-kml" onclick="exportKML()">🗺️ Export to KML (Google Earth)</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let currentUser = "";
+        let currentRoad = "";
+        let map, polyline;
+        let surveyData = [];
+        let watchId = null;
+        let pointCounter = 1;
+
+        function processLogin() {
+            const user = document.getElementById("username").value.trim();
+            const pass = document.getElementById("password").value;
+            if (user !== "" && pass === "1234") {
+                currentUser = user;
+                document.getElementById("displayUser").innerText = currentUser;
+                switchScreen("loginScreen", "roadScreen");
+            } else {
+                document.getElementById("loginError").style.display = "block";
+            }
+        }
+
+        function startSurveySetup() {
+            const road = document.getElementById("roadName").value.trim();
+            if (road !== "") {
+                currentRoad = road;
+                document.getElementById("infoUser").innerText = currentUser;
+                document.getElementById("infoRoad").innerText = currentRoad;
+                switchScreen("roadScreen", "surveyScreen");
+                initBlankMap();
+            } else {
+                alert("Please enter a Road Name.");
+            }
+        }
+
+        function initBlankMap() {
+            // Default center at standard coordinates before GPS kicks in
+            map = L.map('map').setView([23.2324, 87.8624], 13); 
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                maxZoom: 20,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+            polyline = L.polyline([], {color: 'blue', weight: 5}).addTo(map);
+        }
+
+        function startTracking() {
+            if (!navigator.geolocation) {
+                alert("Geolocation is not supported by your browser.");
+                return;
+            }
+            
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('status').innerText = "Status: Fetching GPS... 📍";
+            document.getElementById('status').style.color = "blue";
+
+            watchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+
+                    document.getElementById('status').innerText = "Status: Live Tracking Active ✔";
+                    document.getElementById('status').style.color = "green";
+
+                    const latLng = [lat, lng];
+                    polyline.addLatLng(latLng);
+                    map.setView(latLng, 18);
+
+                    let time = new Date().toLocaleTimeString();
+                    surveyData.push({ 
+                        point: pointCounter++, 
+                        lat: lat.toFixed(6), 
+                        lng: lng.toFixed(6), 
+                        accuracy: accuracy.toFixed(2), 
+                        time: time, 
+                        type: "Route Point" 
+                    });
+                },
+                (error) => {
+                    console.log(error);
+                    document.getElementById('status').innerText = "Status: GPS Error! (Must use HTTPS / Turn on GPS)";
+                    document.getElementById('status').style.color = "red";
+                },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+            );
+        }
+
+        function stopTracking() {
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('status').innerText = "Status: Tracking Stopped 🛑";
+                document.getElementById('status').style.color = "orange";
+            }
+        }
+
+        function capturePhoto() {
+            const fileInput = document.getElementById('cameraInput');
+            if(fileInput.files.length > 0) {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    let time = new Date().toLocaleTimeString();
+                    
+                    surveyData.push({ 
+                        point: "PHOTO_" + pointCounter, 
+                        lat: lat.toFixed(6), 
+                        lng: lng.toFixed(6), 
+                        accuracy: position.coords.accuracy.toFixed(2), 
+                        time: time, 
+                        type: "Photo Point" 
+                    });
+                    
+                    L.marker([lat, lng]).addTo(map).bindPopup("📸 Photo Location").openPopup();
+                    alert("Photo Coordinates Captured!");
+                }, () => alert("GPS error during photo capture."), { enableHighAccuracy: true });
+            }
+        }
+
+        // 1. EXPORT EXCEL (CSV)
+        function exportExcel() {
+            if (surveyData.length === 0) { alert("No data to export!"); return; }
+            let csv = "Surveyor,Road Name,Point,Latitude,Longitude,Accuracy(m),Time,Type\n";
+            surveyData.forEach(r => {
+                csv += `${currentUser},"${currentRoad}",${r.point},${r.lat},${r.lng},${r.accuracy},${r.time},${r.type}\n`;
+            });
+            downloadFile(csv, `Survey_${currentRoad}.csv`, "text/csv");
+        }
+
+        // 2. EXPORT KML (Google Earth Line & Points)
+        function exportKML() {
+            if (surveyData.length === 0) { alert("No data to export!"); return; }
+            
+            let kmlCoords = "";
+            let placemarks = "";
+
+            surveyData.forEach(r => {
+                if (r.type === "Route Point") {
+                    kmlCoords += `${r.lng},${r.lat},0\n`;
+                } else if (r.type === "Photo Point") {
+                    placemarks += `
+                    <Placemark>
+                        <name>${r.point}</name>
+                        <description>Captured by ${currentUser} at ${r.time}</description>
+                        <Point><coordinates>${r.lng},${r.lat},0</coordinates></Point>
+                    </Placemark>`;
+                }
+            });
+
+            let kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${currentRoad} Survey</name>
+    <Placemark>
+      <name>Road Alignment Path</name>
+      <LineString>
+        <tessellate>1</tessellate>
+        <coordinates>
+          ${kmlCoords}
+        </coordinates>
+      </LineString>
+    </Placemark>
+    ${placemarks}
+  </Document>
+</kml>`;
+
+            downloadFile(kml, `Survey_${currentRoad}.kml`, "application/vnd.google-earth.kml+xml");
+        }
+
+        // Helper function to download files
+        function downloadFile(content, fileName, contentType) {
+            const blob = new Blob([content], { type: contentType });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        function switchScreen(hideId, showId) {
+            document.getElementById(hideId).classList.remove("active-screen");
+            document.getElementById(showId).classList.add("active-screen");
+        }
+    </script>
+</body>
+</html>
