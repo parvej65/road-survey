@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Alliance Road Survey Pro 6.1</title>
+<title>Alliance Road Survey Pro 6.2</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -240,15 +240,15 @@
     <div class="login-logo">
       <span class="icon">🛣️</span>
       <h1>Alliance Survey Pro</h1>
-      <p>Road Survey & GPS Alignment Tool v6.1</p>
+      <p>Road Survey & GPS Alignment Tool v6.2</p>
     </div>
     <div class="field">
       <label>Login ID</label>
-      <input type="text" id="username" placeholder="Enter your login ID" autocomplete="username">
+      <input type="text" id="username" value="alliance" placeholder="Enter your login ID" autocomplete="username">
     </div>
     <div class="field">
       <label>Password</label>
-      <input type="password" id="password" placeholder="Enter password" autocomplete="current-password"
+      <input type="password" id="password" value="123" placeholder="Enter password" autocomplete="current-password"
         onkeydown="if(event.key==='Enter')processLogin()">
     </div>
     <button class="btn-login" onclick="processLogin()">Sign In →</button>
@@ -318,6 +318,14 @@
         </div>
       </div>
 
+      <div class="card" style="padding: 10px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+        <span class="card-title" style="margin-bottom:0;">🗺️ Background Map Style:</span>
+        <select id="mapStyleSelect" onchange="changeMapTiles(this.value)" style="width: auto; padding: 4px 8px; font-size: 12px; background: var(--bg); border: 1px solid var(--border); color: #fff; border-radius: 6px;">
+          <option value="satellite">Satellite Hybrid Layer</option>
+          <option value="street">Standard Street Map</option>
+        </select>
+      </div>
+
       <div id="mapPanel1"></div>
 
       <div class="card">
@@ -353,7 +361,7 @@
           <label>Remarks</label>
           <input type="text" id="pointRemarks" placeholder="Describe this point…">
         </div>
-        <button class="btn btn-warn" onclick="addManualPoint()">📍 Add Point at Current Location</button>
+        <button class="btn btn-warn" onclick="addManualPoint()">📍 Add Point &amp; Link To Centerline</button>
       </div>
     </div>
 
@@ -366,11 +374,11 @@
         </div>
         <div class="form-field">
           <label>Road Code</label>
-          <input type="text" id="attrRoadCode" placeholder="e.g. WB-SH-02">
+          <input type="text" id="attrRoadCode" placeholder="e.g. WB-SH-02" oninput="saveRoadAttributesMetadata()">
         </div>
         <div class="form-field">
           <label>Road Type</label>
-          <select id="attrRoadType">
+          <select id="attrRoadType" onchange="saveRoadAttributesMetadata()">
             <option>State Highway</option>
             <option>District Road</option>
             <option>Rural Road (PMGSY)</option>
@@ -384,19 +392,19 @@
         <div class="card-title">📐 Structural Dimensions</div>
         <div class="form-field">
           <label>Carriageway Width / Surface Type</label>
-          <input type="text" id="attrCarriageway" placeholder="e.g. 3.75 m Bituminous">
+          <input type="text" id="attrCarriageway" placeholder="e.g. 3.75 m Bituminous" oninput="saveRoadAttributesMetadata()">
         </div>
         <div class="form-field">
           <label>Roadway Total Width (m)</label>
-          <input type="number" id="attrRoadwayWidth" placeholder="e.g. 7.5">
+          <input type="number" id="attrRoadwayWidth" placeholder="e.g. 7.5" oninput="saveRoadAttributesMetadata()">
         </div>
         <div class="form-field">
           <label>Road Length (km)</label>
-          <input type="number" id="attrRoadLength" placeholder="e.g. 4.25" step="0.01">
+          <input type="number" id="attrRoadLength" placeholder="e.g. 4.25" step="0.01" oninput="saveRoadAttributesMetadata()">
         </div>
         <div class="form-field">
           <label>Embankment Details</label>
-          <input type="text" id="attrEmbankment" placeholder="e.g. Stable Earthen Shoulder">
+          <input type="text" id="attrEmbankment" placeholder="e.g. Stable Earthen Shoulder" oninput="saveRoadAttributesMetadata()">
         </div>
       </div>
 
@@ -404,7 +412,7 @@
         <div class="card-title">📝 Condition & Remarks</div>
         <div class="form-field">
           <label>Surface Condition</label>
-          <select id="attrCondition">
+          <select id="attrCondition" onchange="saveRoadAttributesMetadata()">
             <option>Good</option>
             <option>Fair</option>
             <option>Poor</option>
@@ -413,7 +421,7 @@
         </div>
         <div class="form-field">
           <label>General Remarks</label>
-          <textarea id="attrRemarks" placeholder="Structural features, drainage, hazards…"></textarea>
+          <textarea id="attrRemarks" placeholder="Structural features, drainage, hazards…" oninput="saveRoadAttributesMetadata()"></textarea>
         </div>
       </div>
     </div>
@@ -477,7 +485,7 @@
         <div class="correction-controls">
           <button class="btn btn-ghost btn-sm" onclick="activateLineCorrection()">🔄 Load Draggable Points</button>
           <button class="btn btn-ghost btn-sm" onclick="deleteLastPoint()">🗑️ Delete Last</button>
-          <button class="btn btn-ghost btn-sm" onclick="undoLastDrag()"> Undo</button>
+          <button class="btn btn-ghost btn-sm" onclick="undoLastDrag()">↩ Undo</button>
         </div>
         <div id="correctionStatus" style="font-size:12px;color:var(--accent2);margin-bottom:8px;min-height:18px;"></div>
       </div>
@@ -541,8 +549,90 @@ let lastUndoState = null;
 let isTracking = false;
 let latestPosition = null;
 
+// Map Layer Instances
+let esriSatellite1 = null, labelsLayer1 = null, streetLayer1 = null;
+let esriSatellite4 = null, labelsLayer4 = null, streetLayer4 = null;
+let surveyMarkersLayer1 = null;
+
 // ══════════════════════════════════════════════
-//  LOGIN
+//  LOCALSTORAGE ENGINE (BACKUP & RESTORE)
+// ══════════════════════════════════════════════
+function backupToStorage() {
+  localStorage.setItem("alliance_surveyData", JSON.stringify(surveyData));
+  localStorage.setItem("alliance_pointCounter", pointCounter.toString());
+  localStorage.setItem("alliance_photoCount", photoCount.toString());
+  localStorage.setItem("alliance_totalDistance", totalDistance.toString());
+}
+
+function restoreFromStorage() {
+  try {
+    if (localStorage.getItem("alliance_surveyData")) {
+      surveyData = JSON.parse(localStorage.getItem("alliance_surveyData"));
+      pointCounter = parseInt(localStorage.getItem("alliance_pointCounter") || "1");
+      photoCount = parseInt(localStorage.getItem("alliance_photoCount") || "0");
+      totalDistance = parseFloat(localStorage.getItem("alliance_totalDistance") || "0");
+      return true;
+    }
+  } catch(e) {
+    console.error("Error restoring backup data:", e);
+  }
+  return false;
+}
+
+function saveRoadAttributesMetadata() {
+  const metadata = {
+    name: document.getElementById("attrRoadName").value,
+    code: document.getElementById("attrRoadCode").value,
+    type: document.getElementById("attrRoadType").value,
+    carriageway: document.getElementById("attrCarriageway").value,
+    roadwayWidth: document.getElementById("attrRoadwayWidth").value,
+    roadLength: document.getElementById("attrRoadLength").value,
+    embankment: document.getElementById("attrEmbankment").value,
+    condition: document.getElementById("attrCondition").value,
+    remarks: document.getElementById("attrRemarks").value
+  };
+  localStorage.setItem("alliance_roadMetadata", JSON.stringify(metadata));
+}
+
+function restoreRoadAttributesMetadata() {
+  const stored = localStorage.getItem("alliance_roadMetadata");
+  if (!stored) return;
+  try {
+    const m = JSON.parse(stored);
+    document.getElementById("attrRoadName").value = m.name || "";
+    document.getElementById("attrRoadCode").value = m.code || "";
+    document.getElementById("attrRoadType").value = m.type || "State Highway";
+    document.getElementById("attrCarriageway").value = m.carriageway || "";
+    document.getElementById("attrRoadwayWidth").value = m.roadwayWidth || "";
+    document.getElementById("attrRoadLength").value = m.roadLength || "";
+    document.getElementById("attrEmbankment").value = m.embankment || "";
+    document.getElementById("attrCondition").value = m.condition || "Good";
+    document.getElementById("attrRemarks").value = m.remarks || "";
+    syncRoadName();
+  } catch(e) {}
+}
+
+function restoreTowersFromStorage() {
+  const stored = localStorage.getItem("alliance_towersData");
+  if (stored) {
+    try {
+      towers = JSON.parse(stored);
+      towers.forEach(t => {
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="background:${t.type==='cell'?'#3b82f6':t.type==='tower'?'#f59e0b':'#10b981'};color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap;border:1px solid rgba(255,255,255,0.3);">${t.type==='cell'?'📶':'📡'} ${t.name}</div>`,
+          iconAnchor: [0, 0]
+        });
+        L.marker([t.lat, t.lng], { icon }).addTo(map1);
+        L.marker([t.lat, t.lng], { icon }).addTo(map4);
+      });
+      renderTowerList();
+    } catch(e) {}
+  }
+}
+
+// ══════════════════════════════════════════════
+//  LOGIN & LOAD BACKUP PASS PASS PASS
 // ══════════════════════════════════════════════
 function processLogin() {
   const u = document.getElementById("username").value.trim();
@@ -554,9 +644,88 @@ function processLogin() {
     document.getElementById("mainApp").style.flexDirection = "column";
     initMaps();
     startPassiveGPS();
+    
+    restoreRoadAttributesMetadata();
+    restoreTowersFromStorage();
+    if (restoreFromStorage()) {
+      plotRestoredDataOnMap();
+      refreshPointLog();
+      toast(`🔄 Backed-up data active! Restored ${surveyData.length} points onto current alignment.`);
+    }
   } else {
     document.getElementById("loginError").style.display = "block";
   }
+}
+
+// ══════════════════════════════════════════════
+//  PLOTTING RESTORED WORK DATA
+// ══════════════════════════════════════════════
+function plotRestoredDataOnMap() {
+  if (!surveyData.length) return;
+
+  document.getElementById('metPts').textContent = surveyData.length;
+  document.getElementById('metDist').textContent = totalDistance.toFixed(2);
+
+  const lls = [];
+  surveyMarkersLayer1.clearLayers();
+
+  surveyData.forEach(r => {
+    const latLng = [parseFloat(r.lat), parseFloat(r.lng)];
+    lls.push(latLng);
+
+    if (r.type === "Route Point") {
+      L.circleMarker(latLng, { radius: 2.5, fillColor: '#3b82f6', color: '#000', weight: 0.5, fillOpacity: 0.7, interactive: false }).addTo(map1);
+    } 
+    else if (r.type.includes("Photo Point")) {
+      L.circleMarker(latLng, { radius: 9, fillColor: "#f59e0b", color: "#000", weight: 2, fillOpacity: 1 })
+        .addTo(surveyMarkersLayer1)
+        .bindPopup(`<b>📷 Photo Point ${r.point}</b><br>${r.remarks}`);
+    } 
+    else {
+      // Manual point color code parsing
+      const baseType = r.type.replace(" (Manual)", "");
+      const colors = { Landmark:'#10b981', Culvert:'#06b6d4', Bridge:'#6366f1', Intersection:'#f59e0b', Damage:'#ef4444', Tower:'#f472b6', Other:'#94a3b8' };
+      const col = colors[baseType] || '#ef4444';
+
+      L.circleMarker(latLng, { radius: 8, fillColor: col, color: '#fff', weight: 2, fillOpacity: 1 })
+        .addTo(surveyMarkersLayer1)
+        .bindPopup(`<b>${r.type} #${r.point}</b><br>${r.remarks}<br><small>±${r.accuracy} m</small>`);
+    }
+  });
+
+  polyline1.setLatLngs(lls);
+  polyline4.setLatLngs(lls);
+
+  const bounds = polyline1.getBounds();
+  if (bounds.isValid()) {
+    map1.fitBounds(bounds, { padding: [30, 30] });
+  }
+}
+
+// ══════════════════════════════════════════════
+//  MAP LAYER SWITCH PROTOCOL (BASEMAP CHANGE)
+// ══════════════════════════════════════════════
+function changeMapTiles(styleType) {
+  if (styleType === "street") {
+    // Drop Satellite layers, add OpenStreetMap basic structure
+    if (map1.hasLayer(esriSatellite1)) map1.removeLayer(esriSatellite1);
+    if (map1.hasLayer(labelsLayer1)) map1.removeLayer(labelsLayer1);
+    streetLayer1.addTo(map1);
+
+    if (map4.hasLayer(esriSatellite4)) map4.removeLayer(esriSatellite4);
+    if (map4.hasLayer(labelsLayer4)) map4.removeLayer(labelsLayer4);
+    streetLayer4.addTo(map4);
+  } else {
+    // Drop Street layer, append Imagery hybrid profile
+    if (map1.hasLayer(streetLayer1)) map1.removeLayer(streetLayer1);
+    esriSatellite1.addTo(map1);
+    labelsLayer1.addTo(map1);
+
+    if (map4.hasLayer(streetLayer4)) map4.removeLayer(streetLayer4);
+    esriSatellite4.addTo(map4);
+    labelsLayer4.addTo(map4);
+  }
+  toast("🗺️ Basemap switched successfully");
 }
 
 // ══════════════════════════════════════════════
@@ -576,9 +745,23 @@ function switchPanel(n) {
 //  MAP INIT
 // ══════════════════════════════════════════════
 function initMaps() {
+  // Define layers for Map 1
+  esriSatellite1 = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, attribution: '© Esri' });
+  labelsLayer1 = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 20, opacity: 0.85 });
+  streetLayer1 = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' });
+
+  // Define layers for Map 4
+  esriSatellite4 = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 });
+  labelsLayer4 = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 20, opacity: 0.85 });
+  streetLayer4 = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+
+  // Map 1 setup (Defaults to satellite imagery on launch)
   map1 = L.map('mapPanel1', { zoomControl: true }).setView([23.235, 87.859], 15);
-  addTileLayer(map1);
-  polyline1 = L.polyline([], { color: '#facc15', weight: 5, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }).addTo(map1);
+  esriSatellite1.addTo(map1);
+  labelsLayer1.addTo(map1);
+
+  polyline1 = L.polyline([], { color: '#3b82f6', weight: 5, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }).addTo(map1);
+  surveyMarkersLayer1 = L.layerGroup().addTo(map1);
 
   posMarker1 = L.circleMarker([23.235, 87.859], {
     radius: 8, fillColor: "#3b82f6", color: "#fff", weight: 2.5, fillOpacity: 1
@@ -588,18 +771,11 @@ function initMaps() {
     radius: 0, color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.1, weight: 1
   }).addTo(map1);
 
+  // Map 4 setup
   map4 = L.map('mapPanel4', { zoomControl: false }).setView([23.235, 87.859], 15);
-  addTileLayer(map4);
-  polyline4 = L.polyline([], { color: '#facc15', weight: 5, opacity: 0.9 }).addTo(map4);
-}
-
-function addTileLayer(mapInst) {
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 20, attribution: '© Esri'
-  }).addTo(mapInst);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}.png', {
-    maxZoom: 20, opacity: 0.85
-  }).addTo(mapInst);
+  esriSatellite4.addTo(map4);
+  labelsLayer4.addTo(map4);
+  polyline4 = L.polyline([], { color: '#3b82f6', weight: 5, opacity: 0.9 }).addTo(map4);
 }
 
 // ══════════════════════════════════════════════
@@ -658,6 +834,7 @@ function stopTracking() {
   setStatus('error', '⏹', `Tracking stopped — ${surveyData.length} points, ${totalDistance.toFixed(2)} km`);
   document.getElementById('trackingDot').style.animationDuration = '2s';
   toast('Tracking stopped. ' + surveyData.length + ' points saved.');
+  backupToStorage();
 }
 
 function handleGPSUpdate(position) {
@@ -692,18 +869,16 @@ function handleGPSUpdate(position) {
 
   if (surveyData.length > 0) {
     const last = surveyData[surveyData.length - 1];
-    if (last.type === "Route Point") {
-      const d = haversine(parseFloat(last.lat), parseFloat(last.lng), lat, lng);
-      if (d < 3) return; 
-      totalDistance += d / 1000;
-    }
+    const d = haversine(parseFloat(last.lat), parseFloat(last.lng), lat, lng);
+    if (d < 3) return; 
+    totalDistance += d / 1000;
   }
 
   const latLng = [lat, lng];
   polyline1.addLatLng(latLng);
   polyline4.addLatLng(latLng);
 
-  L.circleMarker(latLng, { radius: 2.5, fillColor: '#ef4444', color: '#ffffff', weight: 1.5, fillOpacity: 1, interactive: false }).addTo(map1);
+  L.circleMarker(latLng, { radius: 2.5, fillColor: '#3b82f6', color: '#000', weight: 0.5, fillOpacity: 0.7, interactive: false }).addTo(map1);
 
   surveyData.push({
     point: pointCounter++,
@@ -717,6 +892,8 @@ function handleGPSUpdate(position) {
 
   document.getElementById('metPts').textContent = surveyData.length;
   document.getElementById('metDist').textContent = totalDistance.toFixed(2);
+  
+  backupToStorage();
   refreshPointLog();
 }
 
@@ -729,7 +906,7 @@ function centerMap() {
 }
 
 // ══════════════════════════════════════════════
-//  MANUAL POINT
+//  MANUAL POINT + AUTO LINE MARKING FUNCTION
 // ══════════════════════════════════════════════
 function addManualPoint() {
   const remark = document.getElementById("pointRemarks").value.trim() || "Marked Point";
@@ -750,14 +927,24 @@ function addManualPoint() {
     const colors = { Landmark:'#10b981', Culvert:'#06b6d4', Bridge:'#6366f1', Intersection:'#f59e0b', Damage:'#ef4444', Tower:'#f472b6', Other:'#94a3b8' };
     const col = colors[ptype] || '#ef4444';
 
+    // Plot Feature Marker
     L.circleMarker(latLng, { radius: 8, fillColor: col, color: '#fff', weight: 2, fillOpacity: 1 })
-      .addTo(map1)
+      .addTo(surveyMarkersLayer1)
       .bindPopup(`<b>${ptype} #${pointCounter}</b><br>${remark}<br><small>±${acc.toFixed(0)} m</small>`)
       .openPopup();
 
+    // Calculate Distance if adding onto center path
+    if (surveyData.length > 0) {
+      const last = surveyData[surveyData.length - 1];
+      const d = haversine(parseFloat(last.lat), parseFloat(last.lng), lat, lng);
+      totalDistance += d / 1000;
+    }
+
+    // DRAW POINT-TO-POINT LINE MANUALLY INTO LEAFLET ALIGNMENTS
     polyline1.addLatLng(latLng);
     polyline4.addLatLng(latLng);
 
+    // Save item directly inside structural data stack
     surveyData.push({
       point: pointCounter++, lat: lat.toFixed(7), lng: lng.toFixed(7),
       alt: pos.coords.altitude ? pos.coords.altitude.toFixed(1) : 'N/A',
@@ -767,8 +954,11 @@ function addManualPoint() {
 
     document.getElementById('pointRemarks').value = "";
     document.getElementById('metPts').textContent = surveyData.length;
-    setStatus('tracking', '✅', `Point added: ${ptype} — "${remark}"`);
-    toast('📍 Point added: ' + remark);
+    document.getElementById('metDist').textContent = totalDistance.toFixed(2);
+    setStatus('tracking', '✅', `Point added: ${ptype} — linked to centerline alignment.`);
+    toast('📍 Point + Alignment Line marked.');
+    
+    backupToStorage(); // Auto save instantly
     refreshPointLog();
   }).catch(() => setStatus('error', '❌', 'GPS error during manual point add'));
 }
@@ -788,6 +978,8 @@ function addTower() {
   document.getElementById("towerName").value = "";
   document.getElementById("towerLat").value = "";
   document.getElementById("towerLng").value = "";
+
+  localStorage.setItem("alliance_towersData", JSON.stringify(towers));
 
   const icon = L.divIcon({
     className: '',
@@ -826,7 +1018,11 @@ function renderTowerList() {
   }).join('');
 }
 
-function removeTower(i) { towers.splice(i, 1); renderTowerList(); }
+function removeTower(i) { 
+  towers.splice(i, 1); 
+  localStorage.setItem("alliance_towersData", JSON.stringify(towers));
+  renderTowerList(); 
+}
 
 function runCrosscheck() {
   if (!latestPosition) { toast("⚠ GPS not available"); return; }
@@ -880,9 +1076,12 @@ function activateLineCorrection() {
       const ll = m.getLatLng();
       surveyData[idx].lat = ll.lat.toFixed(7);
       surveyData[idx].lng = ll.lng.toFixed(7);
-      surveyData[idx].remarks += ' [Corrected]';
+      if(!surveyData[idx].remarks.includes('[Corrected]')) {
+         surveyData[idx].remarks += ' [Corrected]';
+      }
       refreshPolylines();
       document.getElementById('correctionStatus').textContent = `✔ Point ${node.point} updated`;
+      backupToStorage(); 
       refreshPointLog();
     });
     correctionMarkers.push(m);
@@ -898,6 +1097,7 @@ function deleteLastPoint() {
   lastUndoState = JSON.parse(JSON.stringify(surveyData));
   surveyData.pop();
   refreshPolylines();
+  backupToStorage(); 
   refreshPointLog();
   document.getElementById('metPts').textContent = surveyData.length;
   toast('Last point deleted');
@@ -908,6 +1108,7 @@ function undoLastDrag() {
   surveyData = lastUndoState;
   lastUndoState = null;
   refreshPolylines();
+  backupToStorage(); 
   refreshPointLog();
   toast('↩ Undone');
 }
@@ -933,7 +1134,7 @@ function refreshPointLog() {
 }
 
 // ══════════════════════════════════════════════
-//  CAMERA / WATERMARK (CRASH FIX FOR GITHUB)
+//  CAMERA / WATERMARK
 // ══════════════════════════════════════════════
 function capturePhoto() {
   const fileInput = document.getElementById('cameraInput');
@@ -998,32 +1199,34 @@ function capturePhoto() {
         ctx.arc(canvas.width - 20, 20, 8, 0, Math.PI * 2);
         ctx.fill();
 
-        // CHANGED FOR GITHUB: Using Blob Object URL to prevent data URL crash limits on mobile chrome
-        canvas.toBlob(function(blob) {
-          const blobUrl = URL.createObjectURL(blob);
-          const fileName = `IMG_${roadName}_Pt${ptNum}.jpg`;
-          downloadFile(blobUrl, fileName);
-          
-          // Free resources after short delay
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        downloadFile(canvas.toDataURL('image/jpeg', 0.92), `IMG_${roadName}_Pt${ptNum}.jpg`);
 
-          const latLng = [lat, lng];
-          L.circleMarker(latLng, { radius: 9, fillColor: "#f59e0b", color: "#000", weight: 2, fillOpacity: 1 })
-            .addTo(map1).bindPopup(`<b>📷 Photo Point ${ptNum}</b>`);
+        const latLng = [lat, lng];
+        L.circleMarker(latLng, { radius: 9, fillColor: "#f59e0b", color: "#000", weight: 2, fillOpacity: 1 })
+          .addTo(surveyMarkersLayer1).bindPopup(`<b>📷 Photo Point ${ptNum}</b>`);
 
-          surveyData.push({
-            point: pointCounter++, lat: lat.toFixed(7), lng: lng.toFixed(7),
-            alt: altStr, accuracy: acc.toFixed(1),
-            time: timeStr, type: "Photo Point",
-            remarks: `Photo: ${fileName}`
-          });
-          photoCount++;
-          document.getElementById('metPts').textContent = surveyData.length;
-          setStatus('tracking', '📷', 'Photo captured with GPS watermark ✔');
-          toast('📷 Photo saved with GPS stamp');
-          refreshPointLog();
-        }, 'image/jpeg', 0.92);
+        // Connect Line for Photo Points too
+        if (surveyData.length > 0) {
+          const last = surveyData[surveyData.length - 1];
+          totalDistance += haversine(parseFloat(last.lat), parseFloat(last.lng), lat, lng) / 1000;
+        }
+        polyline1.addLatLng(latLng);
+        polyline4.addLatLng(latLng);
 
+        surveyData.push({
+          point: pointCounter++, lat: lat.toFixed(7), lng: lng.toFixed(7),
+          alt: altStr, accuracy: acc.toFixed(1),
+          time: timeStr, type: "Photo Point",
+          remarks: `Photo: IMG_${roadName}_Pt${ptNum}.jpg`
+        });
+        photoCount++;
+        document.getElementById('metPts').textContent = surveyData.length;
+        document.getElementById('metDist').textContent = totalDistance.toFixed(2);
+        setStatus('tracking', '📷', 'Photo captured with GPS watermark ✔');
+        toast('📷 Photo saved with GPS stamp');
+        
+        backupToStorage(); 
+        refreshPointLog();
       };
       img.src = e.target.result;
     };
@@ -1110,11 +1313,32 @@ function exportGeoJSON() {
 function clearSession() {
   if (!confirm("Clear ALL survey data? This cannot be undone.")) return;
   surveyData = []; pointCounter = 1; photoCount = 0; totalDistance = 0;
+  towers = [];
+  
+  localStorage.removeItem("alliance_surveyData");
+  localStorage.removeItem("alliance_pointCounter");
+  localStorage.removeItem("alliance_photoCount");
+  localStorage.removeItem("alliance_totalDistance");
+  localStorage.removeItem("alliance_roadMetadata");
+  localStorage.removeItem("alliance_towersData");
+
   polyline1.setLatLngs([]); polyline4.setLatLngs([]);
+  surveyMarkersLayer1.clearLayers();
+  
+  document.getElementById("attrRoadName").value = "";
+  document.getElementById("attrRoadCode").value = "";
+  document.getElementById("attrCarriageway").value = "";
+  document.getElementById("attrRoadwayWidth").value = "";
+  document.getElementById("attrRoadLength").value = "";
+  document.getElementById("attrEmbankment").value = "";
+  document.getElementById("attrRemarks").value = "";
+  syncRoadName();
+  renderTowerList();
+
   document.getElementById('metPts').textContent = '0';
   document.getElementById('metDist').textContent = '0.00';
   refreshPointLog(); refreshExportPanel();
-  toast('Session cleared');
+  toast('Session completely cleared & reset');
 }
 
 function refreshExportPanel() {
@@ -1152,6 +1376,7 @@ function toDMS(dd, isLat) {
 function syncRoadName() {
   const n = document.getElementById("attrRoadName").value.trim();
   document.getElementById("headerRoadName").textContent = n || "No road set";
+  saveRoadAttributesMetadata();
 }
 
 function setStatus(type, icon, text) {
